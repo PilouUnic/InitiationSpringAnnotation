@@ -1,0 +1,93 @@
+<?xml  version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:aop="http://www.springframework.org/schema/aop"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:mvc="http://www.springframework.org/schema/mvc" xmlns:jee="http://www.springframework.org/schema/jee"
+	xmlns:lang="http://www.springframework.org/schema/lang" xmlns:p="http://www.springframework.org/schema/p"
+	xmlns:tx="http://www.springframework.org/schema/tx" xmlns:util="http://www.springframework.org/schema/util"
+	xmlns:jdbc="http://www.springframework.org/schema/jdbc"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc.xsd
+		http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+		http://www.springframework.org/schema/jee http://www.springframework.org/schema/jee/spring-jee.xsd
+		http://www.springframework.org/schema/lang http://www.springframework.org/schema/lang/spring-lang.xsd
+		http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx.xsd
+		http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util.xsd 
+		http://www.springframework.org/schema/jdbc http://www.springframework.org/schema/jdbc/spring-jdbc.xsd">
+
+
+	<context:annotation-config />
+	<context:component-scan base-package="fr.reactis" />
+
+
+	<bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource">
+
+		<property name="driverClassName" value="com.mysql.jdbc.Driver" />
+		<!-- Nom BDD etc -->
+		<property name="url" value="jdbc:mysql://localhost:3306/employee_manager" />
+		<property name="username" value="root" />
+		<property name="password" value="" />
+
+	</bean>
+	<!-- LocalContainerEntityManagerFactoryBean = classe fournie par Spring. 
+		Evite l'existence du persistence.xml. -->
+	<bean id="entityManagerFactory"
+		class="org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean">
+		<!-- = on constate qu'il se base sur une dataSource. Cela correspond à 
+			la balise bean plus haut. setDataSource avec le contenu de la balise bean 
+			id="dataSource". ON PASSE PAR LES SETTERS. -->
+		<property name="dataSource" ref="dataSource" />
+		<!-- = Package dans lequel je vais trouver les entités JPA. ( = mapping 
+			avec la base) -->
+		<property name="packagesToScan" value="fr.reactis.initiationjpa.model" />
+		<!-- = Properties du persistence.xml. Pas vraiment écrit de la même manière 
+			que dans le persistence.xml. Ici par ex on est en validate (generate false) -->
+		<property name="jpaVendorAdapter">
+			<bean class="org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter">
+				<property name="showSql" value="true" />
+				<property name="generateDdl" value="false" />
+				<property name="databasePlatform" value="org.hibernate.dialect.MySQLDialect" />
+			</bean>
+		</property>
+	</bean>
+
+	<!-- Bean càd instancie une classe. C'est du Spring TX. (délégation à Spring 
+		des transactions) ref ref="entityManagerFactory", cf balise plus haut. -->
+	<bean id="transactionManager" class="org.springframework.orm.jpa.JpaTransactionManager"
+		p:entityManagerFactory-ref="entityManagerFactory" />
+
+	<!-- "Cette classe gérant les transactions sera pilotée par annotation" -->
+	<tx:annotation-driven transaction-manager="transactionManager" />
+
+	<!-- lecture d'un fichier de properties. Spring fait aussi ça S'il n'y en 
+		a que 1, l'ID bien qu'obligatoire ne sert pas. Cf DAOConfig.java. -->
+	<util:properties id="confdao" location="classpath:dao.properties" />
+
+
+
+
+
+	<bean id="beanAspect" class="fr.reactis.initiationjpa.aspect.OperationAspect" />
+
+
+	<!-- =========================== AOP =================================== -->
+	<!-- = appel de méthodes avant ou après d'autres méthodes -->
+	
+	<aop:config>
+		<aop:aspect id="aspect" ref="beanAspect">
+			<!-- aop aspect : inspecte juste 1 package. Si on veut inspecter package 
+				+ sous-packages on est obligé de multiplier les aop aspect. (* = quel que 
+				soit le retour de la méthode *.* = [classe].[méthode] = toutes les méthodes 
+				de toutes les classes -->
+			<aop:pointcut id="idempotentOperation"
+				expression="execution(* fr.reactis.initiationjpa.service.*.*(..))" />
+
+			<aop:before method="doBefore" pointcut-ref="idempotentOperation" />
+			<aop:after-returning method="doAfter" returning="result" pointcut-ref="idempotentOperation" />
+
+		</aop:aspect>
+	</aop:config>
+
+
+</beans>
